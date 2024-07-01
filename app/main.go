@@ -1,9 +1,87 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
 	"net"
 )
+
+type Question struct {
+	Name  string
+	Type  uint16
+	Class uint16
+}
+
+type Record struct {
+	Name  string
+	Type  uint16
+	Class uint16
+	TTL   uint32
+	Len   uint16
+}
+
+type ResultCode int
+
+const (
+	NOERROR ResultCode = iota
+	FORMERR
+	SERVFAIL
+	NXDOMAIN
+	NOTIMP
+	REFUSED
+)
+
+type DNSHeader struct {
+	Id uint16
+
+	Recursion_desired    bool  // 1 bit
+	Truncated_message    bool  // 1 bit
+	Authoritative_answer bool  // 1 bit
+	Opcode               uint8 // 4 bits
+	Response             bool  // 1 bit
+
+	Rescode             ResultCode // 4 bits
+	Checking_disabled   bool       // 1 bit
+	Authed_data         bool       // 1 bit
+	Z                   bool       // 1 bit
+	Recursion_available bool       // 1 bit
+
+	Questions             uint16 // 16 bits
+	Answers               uint16 // 16 bits
+	Authoritative_entries uint16 // 16 bits
+	Resource_entries      uint16 // 16 bits
+}
+
+func NewDNSHeader() DNSHeader {
+	return DNSHeader{
+		Id: 0,
+
+		Response:             false,
+		Opcode:               0,
+		Authoritative_answer: false,
+		Truncated_message:    false,
+		Recursion_desired:    false,
+		Recursion_available:  false,
+		Z:                    false,
+		Rescode:              NOERROR,
+
+		Questions:             0,
+		Answers:               0,
+		Authoritative_entries: 0,
+		Resource_entries:      0,
+
+		Checking_disabled: false,
+		Authed_data:       false,
+	}
+}
+
+type DNSMessage struct {
+	Header     DNSHeader
+	Question   []Question
+	Answer     []Record
+	Authority  []Record
+	Additional []Record
+}
 
 func main() {
 	udpAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:2053")
@@ -31,11 +109,28 @@ func main() {
 		receivedData := string(buf[:size])
 		fmt.Printf("Received %d bytes from %s: %s\n", size, source, receivedData)
 
-		response := []byte{}
+		response := HandleReceivedData(receivedData)
 
 		_, err = udpConn.WriteToUDP(response, source)
 		if err != nil {
 			fmt.Println("Failed to send response:", err)
 		}
 	}
+}
+
+func HandleReceivedData(data string) []byte {
+	header := NewDNSHeader()
+	header.Id = 1234
+	//header.Response = true
+
+	buf := BuildHeader(header)
+	return buf
+}
+
+func BuildHeader(header DNSHeader) []byte {
+	buf := make([]byte, 12)
+	binary.BigEndian.PutUint16(buf[0:2], header.Id)
+	binary.BigEndian.PutUint16(buf[2:4], 0b1000_0000_0000_0000)
+
+	return buf
 }
