@@ -20,6 +20,7 @@ type Record struct {
 	Class uint16
 	TTL   uint32
 	Len   uint16
+	Data  string
 }
 
 type ResultCode int
@@ -124,6 +125,7 @@ func HandleReceivedData(data string) []byte {
 	header := NewDNSHeader()
 	header.Id = 1234
 	header.Questions = 1
+	header.Answers = 1
 
 	buf := BuildHeader(header)
 
@@ -133,7 +135,32 @@ func HandleReceivedData(data string) []byte {
 		Class: 1,
 	}
 	buf = append(buf, BuildQuestion(question)...)
+
+	answer := Record{
+		Name:  "\x0ccodecrafters\x02io\x00",
+		Type:  1,
+		Class: 1,
+		TTL:   60,
+		Len:   4,
+		Data:  "\x08\x08\x08\x08",
+	}
+	buf = append(buf, BuildAnswer(answer)...)
+
 	return buf
+}
+
+func BuildAnswer(r Record) []byte {
+	var b bytes.Buffer
+	w := io.Writer(&b)
+
+	w.Write([]byte(r.Name))
+	binary.Write(w, binary.BigEndian, r.Type)
+	binary.Write(w, binary.BigEndian, r.Class)
+	binary.Write(w, binary.BigEndian, r.TTL)
+	binary.Write(w, binary.BigEndian, r.Len)
+	w.Write([]byte(r.Data))
+
+	return b.Bytes()
 }
 
 func BuildQuestion(question Question) []byte {
@@ -152,6 +179,7 @@ func BuildHeader(header DNSHeader) []byte {
 	binary.BigEndian.PutUint16(buf[0:2], header.Id)
 	binary.BigEndian.PutUint16(buf[2:4], 0b1000_0000_0000_0000)
 	binary.BigEndian.PutUint16(buf[4:6], header.Questions)
+	binary.BigEndian.PutUint16(buf[6:8], header.Answers)
 
 	return buf
 }
