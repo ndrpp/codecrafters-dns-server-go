@@ -122,11 +122,7 @@ func main() {
 }
 
 func HandleReceivedData(data string) []byte {
-	header := NewDNSHeader()
-	header.Id = 1234
-	header.Questions = 1
-	header.Answers = 1
-
+	header := parseHeader(data)
 	buf := BuildHeader(header)
 
 	question := Question{
@@ -147,6 +143,28 @@ func HandleReceivedData(data string) []byte {
 	buf = append(buf, BuildAnswer(answer)...)
 
 	return buf
+}
+
+func parseHeader(data string) DNSHeader {
+	bd := []byte(data)
+
+	header := NewDNSHeader()
+	header.Id = binary.BigEndian.Uint16(bd[0:2])
+	header.Questions = binary.BigEndian.Uint16(bd[4:6])
+	header.Answers = binary.BigEndian.Uint16(bd[4:6])
+
+	flags := binary.BigEndian.Uint16(bd[2:4])
+	header.Response = true
+	header.Authoritative_answer = false
+	header.Truncated_message = false
+	header.Opcode = uint8((flags & 0x7800) >> 11)
+	header.Recursion_desired = (flags & 0x0100) != 0
+
+	header.Recursion_available = false
+	header.Z = false
+	header.Rescode = NOTIMP
+
+	return header
 }
 
 func BuildAnswer(r Record) []byte {
@@ -177,9 +195,36 @@ func BuildQuestion(question Question) []byte {
 func BuildHeader(header DNSHeader) []byte {
 	buf := make([]byte, 12)
 	binary.BigEndian.PutUint16(buf[0:2], header.Id)
-	binary.BigEndian.PutUint16(buf[2:4], 0b1000_0000_0000_0000)
+	binary.BigEndian.PutUint16(buf[2:4], BuildFlags(header))
 	binary.BigEndian.PutUint16(buf[4:6], header.Questions)
 	binary.BigEndian.PutUint16(buf[6:8], header.Answers)
 
 	return buf
+}
+
+func BuildFlags(header DNSHeader) uint16 {
+	var flags uint16
+	if header.Response {
+		flags |= 0x8000
+	}
+	flags |= uint16(header.Opcode) << 11
+	if header.Authoritative_answer {
+		flags |= 0x0400
+	}
+	if header.Truncated_message {
+		flags |= 0x0200
+	}
+	if header.Recursion_desired {
+		flags |= 0x0100
+	}
+	if header.Recursion_available {
+		flags |= 0x0080
+	}
+	if header.Z == true {
+		flags |= uint16(1) << 4
+	} else {
+		flags |= uint16(0) << 4
+	}
+	flags |= uint16(header.Rescode)
+	return flags
 }
