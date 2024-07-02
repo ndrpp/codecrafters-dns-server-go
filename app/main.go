@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"net"
 )
 
@@ -121,16 +123,35 @@ func main() {
 func HandleReceivedData(data string) []byte {
 	header := NewDNSHeader()
 	header.Id = 1234
-	//header.Response = true
+	header.Questions = 1
 
 	buf := BuildHeader(header)
+
+	question := Question{
+		Name:  "\x0ccodecrafters\x02io\x00",
+		Type:  1,
+		Class: 1,
+	}
+	buf = append(buf, BuildQuestion(question)...)
 	return buf
+}
+
+func BuildQuestion(question Question) []byte {
+	var b bytes.Buffer
+	w := io.Writer(&b)
+
+	w.Write([]byte(question.Name))
+	binary.Write(w, binary.BigEndian, question.Type)
+	binary.Write(w, binary.BigEndian, question.Class)
+
+	return b.Bytes()
 }
 
 func BuildHeader(header DNSHeader) []byte {
 	buf := make([]byte, 12)
 	binary.BigEndian.PutUint16(buf[0:2], header.Id)
 	binary.BigEndian.PutUint16(buf[2:4], 0b1000_0000_0000_0000)
+	binary.BigEndian.PutUint16(buf[4:6], header.Questions)
 
 	return buf
 }
