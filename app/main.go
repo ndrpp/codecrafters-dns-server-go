@@ -122,18 +122,15 @@ func main() {
 }
 
 func HandleReceivedData(data string) []byte {
-	header := parseHeader(data)
+	bd := []byte(data)
+	header := parseHeader(bd[:12])
 	buf := BuildHeader(header)
 
-	question := Question{
-		Name:  "\x0ccodecrafters\x02io\x00",
-		Type:  1,
-		Class: 1,
-	}
+	question, _, qName := parseQuestion(bd[12:])
 	buf = append(buf, BuildQuestion(question)...)
 
 	answer := Record{
-		Name:  "\x0ccodecrafters\x02io\x00",
+		Name:  qName,
 		Type:  1,
 		Class: 1,
 		TTL:   60,
@@ -145,9 +142,7 @@ func HandleReceivedData(data string) []byte {
 	return buf
 }
 
-func parseHeader(data string) DNSHeader {
-	bd := []byte(data)
-
+func parseHeader(bd []byte) DNSHeader {
 	header := NewDNSHeader()
 	header.Id = binary.BigEndian.Uint16(bd[0:2])
 	header.Questions = binary.BigEndian.Uint16(bd[4:6])
@@ -165,6 +160,18 @@ func parseHeader(data string) DNSHeader {
 	header.Rescode = NOTIMP
 
 	return header
+}
+
+func parseQuestion(bd []byte) (Question, int, string) {
+	arr := bytes.Split(bd, []byte("\x00"))
+
+	q := Question{
+		Name:  string(arr[0]) + "\x00",
+		Class: 1,
+		Type:  1,
+	}
+
+	return q, len(arr[1]), q.Name
 }
 
 func BuildAnswer(r Record) []byte {
